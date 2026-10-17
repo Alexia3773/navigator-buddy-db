@@ -1,0 +1,13 @@
+# Python Bytecode
+__pycache__/
+*.py[cod]
+
+# Local SQLite databases & state caches
+*.db
+*.db-wal
+*.db-shm
+db-monitor/*.db
+
+# Environment & secrets
+.env
+*.sock
