@@ -1,6 +1,7 @@
 
 <p align="center">
 <img src="assets\DB-Nav-Buddy.jpg" alt="DB Track Monitor & Navigator-Buddy Banner" width="100%">
+<sub><em>Banner illustration generated with AI (Google Gemini ImageFX). All rights and trademarks (DB, Deutsche Bahn) belong to their respective owners.</em></sub>
 </p>
 
 # Hermes DB Agent & Discord Monitor
