@@ -19,8 +19,8 @@ Das System läuft auf einem Linux KVM VPS (Hostinger) unter Ubuntu LTS und kombi
 
 1. **Bahn-Assistent (Admin- & Alarm-Bot):**
    * **Kanal:** `#baustellen-und-störungen` (privater Kanal, nur für Admins).
-   * **Aufgabe:** Vollautomatische Meldungen bei Verspätungen/Ausfällen und Baustellen via Cronjobs.
-   * **Ressourcen:** Arbeitet im Null-Token-Modus (`--no-agent`), wodurch keine laufenden KI-Kosten für Routine-Scans entstehen.
+   * **Aufgabe:** Vollautomatisches Monitoring bei Verspätungen/Ausfällen und Baustellen via Hermes KI-Agenten-Cronjobs.
+   * **Intelligenz:** Nutzt **Claude Haiku 5.5** mit Web-Tools, um Live-Daten dynamisch von `bahn.expert`, `verkehrslage.bahnhof.de` und `bauinfos.deutschebahn.com` zu analysieren und für Pendler zusammenzufassen.
 
 2. **Navigator-Buddy (Community-Reisebegleiter):**
    * **Kanal:** `#bahn-terminal` (öffentlich für alle Server-Mitglieder).
@@ -204,57 +204,28 @@ python3 /root/db-monitor/monitor.py construction
 
 ---
 
-## 7. Phase 5: Zeitgesteuerte Cronjobs (Hermes Scheduler)
+## 7. Phase 5: Zeitgesteuerte Cronjobs (Autonome KI-Agenten)
 
-Zur Ausführung ohne Token-Kosten (`--no-agent`) werden Wrapper in `~/.hermes/scripts/` hinterlegt:
+Statt starrer statischer Skripte führt Hermes zu den definierten Pendlerzeiten echte **KI-Agenten-Aufgaben mit Claude Haiku 5.5** aus. Der Agent recherchiert mithilfe seiner Web-Tools eigenständig auf `bahn.expert`, `verkehrslage.bahnhof.de` und `bauinfos.deutschebahn.com`, bewertet die Lage nach deinen Kriterien (Verspätungen ab 5 Min., Ausfälle, Gleiswechsel, Baustellen) und sendet strukturierte Kurzberichte direkt nach Discord.
 
-```bash
-mkdir -p ~/.hermes/scripts
+### 7.1 Agenten-Instruktionen hinterlegen (`~/.hermes/AGENTS.md`)
+In `~/.hermes/AGENTS.md` sind die Richtlinien und Quellen für den Bahn-Assistenten definiert:
+```markdown
+# Rolle: Bahn-Assistent
+Du bist der spezialisierte Bahn-Monitor für die Pendlerstrecke Hamburg ⇄ Cuxhaven (RE5 / Niederelbebahn) im Discord-Kanal #baustellen-und-störungen.
 
-# Delays-Wrapper anlegen
-cat << 'EOF' > ~/.hermes/scripts/check_delays.py
-import subprocess, sys
-res = subprocess.run([sys.executable, "/root/db-monitor/monitor.py", "delays"], capture_output=True, text=True)
-if res.stdout.strip() and "Keine neuen Verspätungen" not in res.stdout:
-    print(res.stdout.strip())
-EOF
+## Überwachte Bahnhöfe & Streckenabschnitt:
+- Hamburg Hbf, Hamburg-Harburg, Hamburg-Neugraben, Buxtehude, Stade, Otterndorf, Cuxhaven.
 
-# Baustellen-Wrapper anlegen
-cat << 'EOF' > ~/.hermes/scripts/check_construction.py
-import subprocess, sys
-res = subprocess.run([sys.executable, "/root/db-monitor/monitor.py", "construction"], capture_output=True, text=True)
-if res.stdout.strip() and "Keine neuen Baustellenmeldungen" not in res.stdout:
-    print(res.stdout.strip())
-EOF
+## Datenquellen & Web-Tools:
+- Live-Betriebslage & Störungen: [https://verkehrslage.bahnhof.de](https://verkehrslage.bahnhof.de) sowie [https://bahn.expert](https://bahn.expert) (Abfahrten RE5 / S-Bahn)
+- Baustellen, Ersatzverkehr & Fahrplanänderungen: [https://bauinfos.deutschebahn.com](https://bauinfos.deutschebahn.com)
 
-chmod +x ~/.hermes/scripts/*.py
-```
-
-### Geplante Aufgaben registrieren
-```bash
-# 1. Früh-Check vor dem Berufsverkehr (04:00 Uhr)
-hermes cron create "0 4 * * *" \
-  --name "db-delay-morning" \
-  --script "check_delays.py" \
-  --no-agent \
-  --deliver discord
-
-# 2. Feierabendverkehr alle 30 Minuten (15:00 bis 17:00 Uhr)
-hermes cron create "0,30 15-17 * * *" \
-  --name "db-delay-rushhour" \
-  --script "check_delays.py" \
-  --no-agent \
-  --deliver discord
-
-# 3. Baustellen-Scan zweimal täglich (04:05 und 15:05 Uhr)
-hermes cron create "5 4,15 * * *" \
-  --name "db-baustellen" \
-  --script "check_construction.py" \
-  --no-agent \
-  --deliver discord
-```
-
-Mit `hermes cron list` lässt sich der aktive Zeitplan jederzeit prüfen.
+## Verhaltensregeln für Cron-Runs:
+1. Nutze deine Web-Tools, um die aktuellen Daten der genannten Quellen abzurufen.
+2. Filterung: Berücksichtige nur Störungen, Ausfälle oder Verspätungen ab 5 Minuten sowie anstehende/aktive Baustellen für diese Strecke.
+3. Wenn alles pünktlich und störungsfrei ist: Antworte extrem kurz mit "✅ Keine Störungen auf der Strecke Hamburg ⇄ Cuxhaven."
+4. Wenn Störungen oder Arbeiten vorliegen: Fasse Zugnummer, betroffenen Abschnitt, Verzögerung/Ausfall und Ursache kurz und übersichtlich mit Bulletpoints zusammen.
 
 ---
 
