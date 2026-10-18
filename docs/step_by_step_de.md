@@ -227,6 +227,34 @@ Du bist der spezialisierte Bahn-Monitor für die Pendlerstrecke Hamburg ⇄ Cuxh
 3. Wenn alles pünktlich und störungsfrei ist: Antworte extrem kurz mit "✅ Keine Störungen auf der Strecke Hamburg ⇄ Cuxhaven."
 4. Wenn Störungen oder Arbeiten vorliegen: Fasse Zugnummer, betroffenen Abschnitt, Verzögerung/Ausfall und Ursache kurz und übersichtlich mit Bulletpoints zusammen.
 
+## 7.2 Cronjobs mit Autonomen KI-Agenten 
+
+### 1. Früh-Check um 04:00 Uhr (Live-Lage vor der Abfahrt)
+hermes cron create "0 4 * * *" \
+  --name "agent-morning-check" \
+  --deliver discord \
+  "Prüfe die aktuelle Betriebslage für den RE5 zwischen Cuxhaven und Hamburg Hbf auf bahn.expert und verkehrslage.bahnhof.de. Melde Verspätungen ab 5 Minuten oder Zugausfälle für die morgendlichen Pendler."
+
+### 2. Feierabend-Intervall (15:00 bis 17:00 Uhr alle 30 Minuten)
+hermes cron create "0,30 15-17 * * *" \
+  --name "agent-rushhour-check" \
+  --deliver discord \
+  "Prüfe die aktuelle Betriebslage für den RE5 zwischen Hamburg Hbf und Cuxhaven auf bahn.expert. Melde akute Verspätungen ab 5 Minuten, Teilausfälle oder Gleiswechsel für den Feierabendverkehr."
+
+### 3. Baustellen-Scan (zweimal täglich: 04:05 und 15:05 Uhr)
+hermes cron create "5 4,15 * * *" \
+  --name "agent-baustellen-scan" \
+  --deliver discord \
+  "Prüfe auf bauinfos.deutschebahn.com und verkehrslage.bahnhof.de alle aktiven und anstehenden Baustellen oder SEV-Maßnahmen für die Strecke RE5 Hamburg ⇄ Cuxhaven. Fasse die Einschränkungen für Pendler übersichtlich zusammen."
+
+## 7.3 Status und manuelle Testläufe
+
+### Aktive Jobs kontrollieren
+hermes cron list
+
+# Einzelnen Agenten-Lauf sofort manuell testen
+hermes cron run agent-rushhour-check
+
 ---
 
 ## 8. Phase 6: Dauerbetrieb als systemd-Dienst
