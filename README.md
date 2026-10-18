@@ -153,20 +153,28 @@ sudo systemctl enable --now hermes
 
 ## Automated Monitoring (Cron Jobs)
 
-The monitoring script `/root/db-monitor/monitor.py` handles API requests locally without burning LLM tokens. Deduplication is handled via local SQLite (`monitor_state.db`).
+The monitoring script `/root/db-monitor/monitor.py` handles API requests locally without burning LLM tokens (`--no-agent`). Deduplication is handled via local SQLite (`monitor_state.db`).
 
-Register the scheduled jobs inside Hermes:
-
-```bash
-# Live delay and cancellation check every 30 minutes
-hermes cron add --name "db-live-delay" --schedule "*/30 * * * *" --command "python3 /root/db-monitor/monitor.py delays"
-
-# Construction site scan twice daily (06:00 and 18:00)
-hermes cron add --name "db-baustellen" --schedule "0 6,18 * * *" --command "python3 /root/db-monitor/monitor.py construction"
-```
-
-Verify active jobs:
+The scheduled jobs are registered directly inside Hermes to match commuter peak times:
 
 ```bash
-hermes cron list
-```
+# Morning commuter delay check (04:00)
+hermes cron create "0 4 * * *" \
+  --name "db-delay-morning" \
+  --script "check_delays.py" \
+  --no-agent \
+  --deliver discord
+
+# Rush-hour delay monitoring every 30 minutes (15:00 to 17:00: 15:00, 15:30, 16:00, 16:30, 17:00)
+hermes cron create "0,30 15-17 * * *" \
+  --name "db-delay-rushhour" \
+  --script "check_delays.py" \
+  --no-agent \
+  --deliver discord
+
+# Construction & infrastructure scan twice daily (04:05 and 15:05)
+hermes cron create "5 4,15 * * *" \
+  --name "db-baustellen" \
+  --script "check_construction.py" \
+  --no-agent \
+  --deliver discord
