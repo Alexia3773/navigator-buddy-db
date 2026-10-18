@@ -26,27 +26,27 @@ The system runs two distinct Discord bot identities through a unified multi-prof
    - Enforces strict guardrails (rejects non-rail queries like weather, coding, or chit-chat).
 
 ```
-                      +-----------------------------+
++-----------------------------+
                       |             KVM VPS         |
-                      |      (Ubuntu 26.04 LTS)     |
+                      |      (Ubuntu 24.04 LTS)     |
                       +--------------+--------------+
                                      |
               +----------------------+----------------------+
               |                                             |
-   [ hermes.service (systemd) ]                [ Python Monitor Script ]
-   Hermes Multi-Profile Gateway                 (Runs via Cron / CLI)
+   [ hermes.service (systemd) ]                [ Hermes Agent Scheduler ]
+   Hermes Multi-Profile Gateway                 (Runs Prompts via Cron)
               |                                             |
      +--------+--------+                           +--------+--------+
      |                 |                           |                 |
-Profile: default   Profile: navigator        IRIS API          DB Bauinfos
-(Bahn-Assistent)   (Navigator-Buddy)      (bahn.expert)     (verkehrslage)
+Profile: default   Profile: navigator        Claude Haiku 5.5   Web Tools
+(Bahn-Assistent)   (Navigator-Buddy)        (Tool-Calling AI) (Search/Extract)
      |                 |                           |                 |
      +--------+--------+                           +--------+--------+
               |                                             |
               v                                             v
-     Discord WebSocket Gateway                     Discord Webhook / Channel
-    (#baustellen-und-stoerungen)                         (#bahn-terminal)
-```
+     Discord WebSocket Gateway                     Discord Channels
+    (#baustellen-und-stoerungen)             (#baustellen-und-stoerungen)
+                                                   (#bahn-terminal)
 
 ---
 
@@ -151,30 +151,29 @@ sudo systemctl enable --now hermes
 
 ---
 
-## Automated Monitoring (Cron Jobs)
+## Automated Monitoring (Autonomous Agent Cron Jobs)
 
-The monitoring script `/root/db-monitor/monitor.py` handles API requests locally without burning LLM tokens (`--no-agent`). Deduplication is handled via local SQLite (`monitor_state.db`).
+Monitoring is powered directly by **Claude Haiku 5.5** running within the Hermes Agent framework. Instead of static script parsing, Hermes executes periodic prompt-based jobs where the AI autonomously navigates real-time feeds (e.g. `bahn.expert`, `verkehrslage.bahnhof.de`, and `bauinfos.deutschebahn.com`) using web search and extraction tools, verifies disruption thresholds (delays $\ge$ 5 min, cancellations, track work), formats commuter digests, and pushes alerts directly to Discord.
 
-The scheduled jobs are registered directly inside Hermes to match commuter peak times:
+Rules and source constraints for automated scans are defined in `~/.hermes/AGENTS.md`.
+
+The autonomous jobs are scheduled directly inside the Hermes scheduler:
 
 ```bash
-# Morning commuter delay check (04:00)
+# 1. Early morning commuter check (04:00)
 hermes cron create "0 4 * * *" \
-  --name "db-delay-morning" \
-  --script "check_delays.py" \
-  --no-agent \
-  --deliver discord
+  --name "agent-morning-check" \
+  --deliver discord \
+  "Prüfe die aktuelle Betriebslage für den RE5 zwischen Cuxhaven und Hamburg Hbf auf bahn.expert und verkehrslage.bahnhof.de. Melde Verspätungen ab 5 Minuten oder Zugausfälle für die morgendlichen Pendler."
 
-# Rush-hour delay monitoring every 30 minutes (15:00 to 17:00: 15:00, 15:30, 16:00, 16:30, 17:00)
+# 2. Afternoon rush-hour window every 30 minutes (15:00 to 17:00)
 hermes cron create "0,30 15-17 * * *" \
-  --name "db-delay-rushhour" \
-  --script "check_delays.py" \
-  --no-agent \
-  --deliver discord
+  --name "agent-rushhour-check" \
+  --deliver discord \
+  "Prüfe die aktuelle Betriebslage für den RE5 zwischen Hamburg Hbf und Cuxhaven auf bahn.expert. Melde akute Verspätungen ab 5 Minuten, Teilausfälle oder Gleiswechsel für den Feierabendverkehr."
 
-# Construction & infrastructure scan twice daily (04:05 and 15:05)
+# 3. Construction & infrastructure scan twice daily (04:05 and 15:05)
 hermes cron create "5 4,15 * * *" \
-  --name "db-baustellen" \
-  --script "check_construction.py" \
-  --no-agent \
-  --deliver discord
+  --name "agent-baustellen-scan" \
+  --deliver discord \
+  "Prüfe auf bauinfos.deutschebahn.com und verkehrslage.bahnhof.de alle aktiven und anstehenden Baustellen oder SEV-Maßnahmen für die Strecke RE5 Hamburg ⇄ Cuxhaven. Fasse die Einschränkungen für Pendler übersichtlich zusammen."
