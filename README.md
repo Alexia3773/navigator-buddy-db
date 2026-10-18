@@ -28,7 +28,7 @@ The system runs two distinct Discord bot identities through a unified multi-prof
 ```
 +-----------------------------+
                       |             KVM VPS         |
-                      |      (Ubuntu 24.04 LTS)     |
+                      |      (Ubuntu 26.04 LTS)     |
                       +--------------+--------------+
                                      |
               +----------------------+----------------------+
