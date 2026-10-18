@@ -29,7 +29,7 @@ The system runs on a Linux KVM VPS (Hostinger) under Ubuntu LTS, serving two dis
 
 ```text
                           +-----------------------------+
-                          |      Hostinger KVM VPS      |
+                          |            KVM VPS          |
                           |   Ubuntu LTS (UFW / SSH)    |
                           +--------------+--------------+
                                          |
