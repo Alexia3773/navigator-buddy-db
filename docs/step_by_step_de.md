@@ -4,32 +4,32 @@
 
 ## 1. Warum dieses Projekt entstanden ist (Motivation)
 
-Jeder, der regelmäßig mit der Bahn pendelt – insbesondere auf Linien wie dem **RE5** oder im S-Bahn-Netz rund um Hamburg und die Niederelbebahn –, kennt das frustrierende Gefühl:
+Jeder, der regelmäßig mit der Bahn pendelt – insbesondere auf Linien wie dem **RE 5** oder im S-Bahn-Netz rund um Hamburg und die Niederelbebahn –, kennt das frustrierende Gefühl:
 * Züge fallen kurzfristig aus oder sammeln massive Verspätungen an.
 * Durchsagen am Bahnsteig erfolgen oft zu spät, widersprechen sich oder fehlen völlig.
 * Fahrplan-Apps aktualisieren die Lage häufig erst dann, wenn man bereits frierend am Gleis steht.
 
-Aus diesem ständigen Ärger über mangelnde und verspätete Kommunikation entstand die Idee für dieses Projekt: **Eine eigene, automatisierte Lösung, die Betriebs- und Baustellendaten direkt an der Quelle abfängt und mich proaktiv informiert, bevor ich das Haus verlasse.**
+Aus diesem ständigen Ärger über unzuverlässige und verspätete Fahrgastinformationen entstand die Idee für dieses Projekt: **Eine eigene, automatisierte Lösung, die Betriebs- und Baustellendaten direkt an der Quelle abfängt und mich proaktiv informiert, bevor ich das Haus verlasse.**
 
 ---
 
 ## 2. Architektur & Systemüberblick
 
-Das System läuft auf einem Linux KVM VPS (Hostinger) unter Ubuntu LTS und kombiniert zwei spezialisierte Discord-Bots über das Multiplex-Gateway des **Hermes Agent Frameworks**:
+Das System läuft auf einem Linux KVM VPS unter Ubuntu LTS und kombiniert zwei spezialisierte Discord-Bots über das Multiplex-Gateway des **Hermes Agent Frameworks**:
 
 1. **Bahn-Assistent (Admin- & Alarm-Bot):**
    * **Kanal:** `#baustellen-und-störungen` (privater Kanal, nur für Admins).
    * **Aufgabe:** Vollautomatisches Monitoring bei Verspätungen/Ausfällen und Baustellen via Hermes KI-Agenten-Cronjobs.
-   * **Intelligenz:** Nutzt **Claude Haiku 5.5** mit Web-Tools, um Live-Daten dynamisch von `bahn.expert`, `verkehrslage.bahnhof.de` und `bauinfos.deutschebahn.com` zu analysieren und für Pendler zusammenzufassen.
+   * **Intelligenz:** Nutzt **Claude Haiku 5.5** mit Web-Tools, um offizielle DB IRIS Live-Bahnhofstafeln und Baustellenmeldungen dynamisch zu analysieren.
 
 2. **Navigator-Buddy (Community-Reisebegleiter):**
    * **Kanal:** `#bahn-terminal` (öffentlich für alle Server-Mitglieder).
-   * **Aufgabe:** Beantwortet Fragen zu Fahrzeiten, Gleisen, Verbindungen und Umstiegen auf Deutsch.
+   * **Aufgabe:** Beantwortet interaktiv Fragen zu Verbindungen, Gleisen, Fahrzeiten und Umstiegen.
    * **Schutz:** Strikte Guardrails weisen bahnfremde Anfragen (Wetter, Smalltalk, Programmierung) konsequent ab.
 
 ```text
                           +-----------------------------+
-                          |      Hostinger KVM VPS      |
+                          |      Linux KVM VPS          |
                           |   Ubuntu LTS (UFW / SSH)    |
                           +--------------+--------------+
                                          |
@@ -51,13 +51,15 @@ Das System läuft auf einem Linux KVM VPS (Hostinger) unter Ubuntu LTS und kombi
 ## 3. Phase 1: Server-Vorbereitung & Härtung
 
 ### 3.1 Basis-Pakete & Werkzeuge installieren
-Auf dem VPS werden zunächst alle Abhängigkeiten für Python, Web-Scraping und Sicherheit installiert:
+Auf dem VPS werden zunächst alle Abhängigkeiten für Paketverwaltung, Werkzeuge und Systemsicherheit installiert:
+
 ```bash
-sudo apt update && sudo apt install -y curl git python3 python3-pip python3-httpx python3-bs4 ufw fail2ban unattended-upgrades
+sudo apt update && sudo apt install -y curl git python3 python3-pip ufw fail2ban unattended-upgrades
 ```
 
 ### 3.2 UFW-Firewall & Port-Minimierung
 Da die Bots ausgehende WebSocket- und HTTPS-Verbindungen nutzen, werden sämtliche eingehenden Ports bis auf SSH blockiert:
+
 ```bash
 # Eingehenden Datenverkehr sperren, ausgehenden erlauben
 sudo ufw default deny incoming
@@ -74,7 +76,8 @@ sudo ufw status verbose
 ```
 
 ### 3.3 SSH-Schlüsselpaar einrichten & Passwort-Login deaktivieren
-Schlüssel werden lokal auf den jeweiligen Rechnern erzeugt und übertragen:
+Erstelle die Schlüssel lokal auf deinen Arbeitsplatzrechnern (Linux oder Windows) und übertrage den **Public Key** auf den VPS:
+
 * **EndeavourOS / Linux:**
   ```bash
   ssh-keygen -t ed25519 -C "endeavour-hermes"
@@ -85,9 +88,10 @@ Schlüssel werden lokal auf den jeweiligen Rechnern erzeugt und übertragen:
   ssh-keygen -t ed25519 -C "win11-hermes"
   Get-Content ~\.ssh\id_ed25519.pub
   ```
-  *(Den Schlüssel auf dem VPS an `~/.ssh/authorized_keys` anfügen)*
+  *(Den öffentlichen Schlüssel auf dem VPS an `~/.ssh/authorized_keys` anfügen)*
 
-Sobald der schlüssellose Login funktioniert, wird die Passwortanmeldung auf dem VPS gesperrt:
+Sobald der schlüssellose Login getestet ist, wird die unsichere Passwortanmeldung auf dem VPS gesperrt:
+
 ```bash
 sudo sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
 sudo sed -i 's/PasswordAuthentication yes/PasswordAuthentication no/' /etc/ssh/sshd_config
@@ -104,162 +108,111 @@ sudo systemctl restart ssh
 2. Unter **Bot**:
    * **Public Bot** deaktivieren (verhindert unbefugtes Einladen durch Dritte).
    * **Message Content Intent** unter *Privileged Gateway Intents* aktivieren.
-3. Unter **Installation** den Standard-Autorisierungslink auf *Keine* setzen (Validierungsfehler vermeiden).
-4. Über **OAuth2 > URL Generator** einen Link mit den Scopes `bot` und Rechten (Nachrichten senden, Nachrichtenverlauf lesen, Links einbetten) erzeugen und den Bot auf den eigenen Server in `#baustellen-und-störungen` einladen.
-5. Das Bot-Token kopieren.
+3. Unter **Installation** den Standard-Autorisierungslink auf *Keine* setzen.
+4. Über **OAuth2 > URL Generator** einen Link mit dem Scope `bot` und Rechten (Nachrichten senden, Nachrichtenverlauf lesen, Links einbetten) erzeugen und den Bot in den privaten Admin-Kanal `#baustellen-und-störungen` einladen.
+5. Bot-Token kopieren.
 
 ### 4.2 Bot 2: „Navigator-Buddy“ anlegen
 1. Eine zweite Applikation namens `Navigator-Buddy` erstellen.
 2. Identische Rechte vergeben: **Public Bot** aus, **Message Content Intent** an.
-3. Über den URL-Generator auf den Discord-Server einladen und dem Kanal `#bahn-terminal` zuweisen.
+3. Über den URL-Generator auf den Discord-Server einladen und dem öffentlichen Kanal `#bahn-terminal` zuweisen.
 4. Das zweite Bot-Token kopieren.
 
 ---
 
-## 5. Phase 3: Hermes Agent Multi-Profile & Guardrails
+## 5. Phase 3: Hermes Agent Multi-Profile Setup
 
 ### 5.1 Hermes CLI installieren
 ```bash
-curl -fsSL [https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh](https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh) | bash
+curl -fsSL https://raw.githubusercontent.com/NousResearch/hermes-agent/main/scripts/install.sh | bash
 ```
 * **Modell:** `anthropic/claude-haiku-5.5` (via OpenRouter).
-* **Backend:** `Keep current (local)`.
+* **Runtime:** `Keep current (local)`.
 * **Telemetrie:** `No thanks`.
 
-### 5.2 Standard-Profil (Bahn-Assistent) einrichten
-```bash
-hermes gateway setup
-```
-* Plattform: `Discord`
-* Token: Token von *Bahn-Assistent* einfügen.
-* Allowlist / Security: Eigenen Discord-Nutzer eintragen.
-* Home Channel: Im Discord-Kanal `#baustellen-und-störungen` den Befehl `/set-home` ausführen.
+### 5.2 Profile konfigurieren
+1. **Hauptprofil (Bahn-Assistent):**
+   ```bash
+   hermes gateway setup
+   ```
+   * Plattform: `Discord`
+   * Token von *Bahn-Assistent* einfügen.
+   * Im Discord-Kanal `#baustellen-und-störungen` den Befehl `/set-home` ausführen.
 
-### 5.3 Zweites Profil (Navigator-Buddy) anlegen
-```bash
-# Profil erstellen
-hermes profile create navigator
+2. **Zweites Profil (Navigator-Buddy):**
+   ```bash
+   hermes profile create navigator
+   cp ~/.hermes/.env ~/.hermes/profiles/navigator/.env
+   hermes -p navigator gateway setup
+   ```
+   * Token von *Navigator-Buddy* einfügen.
+   * Allowlist leer lassen, damit alle Servermitglieder im Terminal fragen können.
+   * Im Discord-Kanal `#bahn-terminal` den Befehl `/set-home` von *Navigator-Buddy* aufrufen.
 
-# API-Keys und Umgebungsvariablen übernehmen
-cp ~/.hermes/.env ~/.hermes/profiles/navigator/.env
-
-# Gateway-Verbindung für das Profil konfigurieren
-hermes -p navigator gateway setup
-```
-* Token von *Navigator-Buddy* eingeben.
-* Allowlist leer lassen (alle Servermitglieder dürfen im Terminal fragen).
-* Im Discord-Kanal `#bahn-terminal` den Befehl `/set-home` von *Navigator-Buddy* aufrufen.
-
-### 5.4 Themenbeschränkungen (Guardrails) hinterlegen
-
-Damit beide Bots ausschließlich Fragen zur Bahn beantworten und Kosten sparen:
-
-* **Navigator-Buddy (`~/.hermes/profiles/navigator/AGENTS.md`):**
-```text
-# Rolle: Navigator-Buddy
-Du bist der exklusive Fahrplan- und Reise-Assistent für die Deutsche Bahn im Kanal #bahn-terminal.
-
-Regeln:
-1. Beantworte AUSSCHLIESSLICH Fragen zu Zugverbindungen, Abfahrtszeiten, Bahnhöfen, Gleisen und Umstiegen der DB auf Deutsch.
-2. Weise ALLE anderen Themen (Wetter, Witze, Programmierung, Smalltalk) strikt mit folgendem Satz ab:
-   "Hallo! Als Navigator-Buddy helfe ich euch exklusiv bei Fahrplänen und Verbindungen der Deutschen Bahn. Stelle mir gerne eine Frage zu deiner nächsten Zugfahrt!"
-3. Erlaubte Quellen: bahn.expert, bahn.de, verkehrslage.bahnhof.de.
-```
-*(Anschließend per `cp AGENTS.md SOUL.md` synchronisieren)*
-
-* **Bahn-Assistent (`~/.hermes/AGENTS.md`):**
-```text
-# Rolle: Bahn-Assistent
-Du bist der interne Betriebs- und Monitor-Assistent im Kanal #baustellen-und-störungen.
-Reagiere nur auf betriebliche Bahnfragen und ignoriere bahnfremden Smalltalk.
-```
-
-### 5.5 Multiplexing aktivieren
-Damit beide Profile über einen einzigen zentralen Hintergrundprozess betrieben werden:
-```bash
-hermes gateway migrate --multiplex
-```
+3. **Multiplexing aktivieren:**
+   ```bash
+   hermes gateway migrate --multiplex
+   ```
 
 ---
 
-## 6. Phase 4: Lokales Überwachungs-Skript (`monitor.py`)
+## 6. Phase 4: Sicherheitsleitfaden für System-Prompts & Guardrails
 
-Unter `/root/db-monitor/monitor.py` liegt das Python-Skript, das über die IRIS-Schnittstelle und DB-Seiten Störungen abfragt und über SQLite (`monitor_state.db`) dedupliziert.
+> **Wichtiger Hinweis zur Geheimhaltung:**  
+> Die konkreten internen System-Prompts der Bots dürfen niemals in öffentlichen Dokumentationen, Repositories oder Chat-Ausgaben offengelegt werden. Sie stellen die interne Kernlogik dar und bieten Angreifern bei Offenlegung gezielte Angriffspunkte für Jailbreaks.
 
-Überwachte Stationen:
-* Cuxhaven (8001384)
-* Otterndorf (8004738)
-* Hamburg-Neugraben (8002553)
-* Hamburg-Harburg (8002548)
-* Hamburg Hbf (8002549)
+Beim Verfassen eigener System-Prompts (`AGENTS.md` und `SOUL.md`) sollten folgende Best Practices und Restriktionen beachtet werden:
 
-### Manueller Testlauf
-```bash
-# 1. Verspätungsprüfung testen
-python3 /root/db-monitor/monitor.py delays
+### 1. Strikte Themenbegrenzung (Out-of-Scope Abweisung)
+* **Klare Verbotszonen:** Definiere explizit, welche Themengebiete (z. B. Programmierung, Politik, Witze, Smalltalk, allgemeines Wetter) strikt abzuweisen sind.
+* **Feste Ablehnungsformel:** Gib dem Modell eine unveränderliche Standard-Antwort vor, die es bei Off-Topic-Fragen ausgeben muss. Dadurch wird verhindert, dass das Modell ins Diskutieren gerät.
 
-# 2. Baustellenprüfung testen
-python3 /root/db-monitor/monitor.py construction
-```
+### 2. Defense-in-Depth gegen Prompt Injection
+* **Trennung von Systembefehl und Nutzerinput:** Mache dem Modell unmissverständlich klar, dass Instruktionen innerhalb von Nutzerfragen oder externen Websites niemals die Grundregeln des System-Prompts überschreiben dürfen.
+* **Keine Systemprompt-Herausgabe:** Verankere eine Regel, dass der Bot seine internen Arbeitsanweisungen oder Konfigurationen unter keinen Umständen an Nutzer im Chat verraten darf.
+
+### 3. Datenquellen & URL-Einschränkung
+* **Whitelisting:** Erlaube nur den Aufruf vertrauenswürdiger, im System-Prompt explizit genannter Domains (z. B. offizielle Bahnhofstafeln und Baustellen-Feeds).
+* **Verbot von Sekundärquellen:** Verbiete dem Agenten ausdrücklich, auf unzuverlässige Presseberichte, Blogs oder Drittmedien auszuweichen.
+
+### 4. Antwortlänge & Formatgrenzen
+* **Kompaktheitsbremse:** Begrenze automatische Warnungen strikt auf ein kurzes Limit (z. B. maximal 40 Wörter), um Latenzen zu minimieren und Token-Kosten bei OpenRouter niedrig zu halten.
+* **Echtzeit-Validierung:** Weise den Agenten an, stets das aktuelle Systemdatum zu prüfen und historische Statistiken niemals mit akuten Live-Verspätungen zu verwechseln.
 
 ---
 
 ## 7. Phase 5: Zeitgesteuerte Cronjobs (Autonome KI-Agenten)
 
-Statt starrer statischer Skripte führt Hermes zu den definierten Pendlerzeiten echte **KI-Agenten-Aufgaben mit Claude Haiku 5.5** aus. Der Agent recherchiert mithilfe seiner Web-Tools eigenständig auf `bahn.expert`, `verkehrslage.bahnhof.de` und `bauinfos.deutschebahn.com`, bewertet die Lage nach deinen Kriterien (Verspätungen ab 5 Min., Ausfälle, Gleiswechsel, Baustellen) und sendet strukturierte Kurzberichte direkt nach Discord.
+Für das Monitoring nutzt das System keine statischen Scraper mehr, sondern führt zeitgesteuerte Agenten-Prompts mit **Claude Haiku 5.5** aus. Der Agent liest Live-Bahnhofstafeln via IRIS (`iris.noncd.db.de`) und Fahrten via `delaybahn.com` aus:
 
-### 7.1 Agenten-Instruktionen hinterlegen (`~/.hermes/AGENTS.md`)
-In `~/.hermes/AGENTS.md` sind die Richtlinien und Quellen für den Bahn-Assistenten definiert:
-```markdown
-# Rolle: Bahn-Assistent
-Du bist der spezialisierte Bahn-Monitor für die Pendlerstrecke Hamburg ⇄ Cuxhaven (RE5 / Niederelbebahn) im Discord-Kanal #baustellen-und-störungen.
-
-## Überwachte Bahnhöfe & Streckenabschnitt:
-- Hamburg Hbf, Hamburg-Harburg, Hamburg-Neugraben, Buxtehude, Stade, Otterndorf, Cuxhaven.
-
-## Datenquellen & Web-Tools:
-- Live-Betriebslage & Störungen: [https://verkehrslage.bahnhof.de](https://verkehrslage.bahnhof.de) sowie [https://bahn.expert](https://bahn.expert) (Abfahrten RE5 / S-Bahn)
-- Baustellen, Ersatzverkehr & Fahrplanänderungen: [https://bauinfos.deutschebahn.com](https://bauinfos.deutschebahn.com)
-
-## Verhaltensregeln für Cron-Runs:
-1. Nutze deine Web-Tools, um die aktuellen Daten der genannten Quellen abzurufen.
-2. Filterung: Berücksichtige nur Störungen, Ausfälle oder Verspätungen ab 5 Minuten sowie anstehende/aktive Baustellen für diese Strecke.
-3. Wenn alles pünktlich und störungsfrei ist: Antworte extrem kurz mit "✅ Keine Störungen auf der Strecke Hamburg ⇄ Cuxhaven."
-4. Wenn Störungen oder Arbeiten vorliegen: Fasse Zugnummer, betroffenen Abschnitt, Verzögerung/Ausfall und Ursache kurz und übersichtlich mit Bulletpoints zusammen.
-
-## 7.2 Cronjobs mit Autonomen KI-Agenten 
-
-### 1. Früh-Check um 04:00 Uhr (Live-Lage vor der Abfahrt)
-hermes cron create "0 4 * * *" \
+```bash
+# 1. Früh-Check vor dem Berufsverkehr (04:30 Uhr dt. Zeit)
+hermes cron create "30 4 * * *" \
   --name "agent-morning-check" \
   --deliver discord \
-  "Prüfe die aktuelle Betriebslage für den RE5 zwischen Cuxhaven und Hamburg Hbf auf bahn.expert und verkehrslage.bahnhof.de. Melde Verspätungen ab 5 Minuten oder Zugausfälle für die morgendlichen Pendler."
+  "Ermittle das heutige Datum. Prüfe die Live-Abfahrtstafeln von Cuxhaven (ACX) und Stade (AST) für den RE 5 zwischen 04:30 und 07:00 Uhr in Fahrtrichtung Hamburg Hbf. Melde nur akute Verspätungen ab 5 Min. oder Ausfälle am heutigen Tag. Maximal 40 Wörter."
 
-### 2. Feierabend-Intervall (15:00 bis 17:00 Uhr alle 30 Minuten)
-hermes cron create "0,30 15-17 * * *" \
+# 2. Feierabendverkehr alle 30 Minuten (15:00 bis 17:30 Uhr dt. Zeit)
+hermes cron create "0,30 15,16,17 * * *" \
   --name "agent-rushhour-check" \
   --deliver discord \
-  "Prüfe die aktuelle Betriebslage für den RE5 zwischen Hamburg Hbf und Cuxhaven auf bahn.expert. Melde akute Verspätungen ab 5 Minuten, Teilausfälle oder Gleiswechsel für den Feierabendverkehr."
+  "Ermittle das heutige Datum und aktuelle Uhrzeit. Prüfe für den RE 5 Richtung Cuxhaven die Live-Abfahrten auf den IRIS-Tafeln von Hamburg Hbf (AH), Hamburg-Harburg (AHAR), Buxtehude (ABX) und Stade (AST). Melde akute Live-Verspätungen ab 5 Min., Gleiswechsel oder Ausfälle für die nächste Stunde. Maximal 40 Wörter."
 
-### 3. Baustellen-Scan (zweimal täglich: 04:05 und 15:05 Uhr)
+# 3. Baustellen- & SEV-Scan (04:05 & 15:05 Uhr dt. Zeit)
 hermes cron create "5 4,15 * * *" \
   --name "agent-baustellen-scan" \
   --deliver discord \
-  "Prüfe auf bauinfos.deutschebahn.com und verkehrslage.bahnhof.de alle aktiven und anstehenden Baustellen oder SEV-Maßnahmen für die Strecke RE5 Hamburg ⇄ Cuxhaven. Fasse die Einschränkungen für Pendler übersichtlich zusammen."
+  "Lies https://verkehrslage.bahnhof.de/de/region/DB_Regio_Nord und https://bauinfos.deutschebahn.com/niedersachsen-bremen aus. Filtere alle aktiven oder anstehenden Baustellen oder Ersatzverkehre (SEV) für den RE 5 (Hamburg ⇄ Cuxhaven). Maximal 40 Wörter."
+```
 
-## 7.3 Status und manuelle Testläufe
-
-### Aktive Jobs kontrollieren
-hermes cron list
-
-# Einzelnen Agenten-Lauf sofort manuell testen
-hermes cron run agent-rushhour-check
+*(Hinweis: Falls die Systemuhr des VPS auf UTC läuft, müssen die Stunden an den UTC-Versatz angepasst werden).*
 
 ---
 
 ## 8. Phase 6: Dauerbetrieb als systemd-Dienst
 
 Datei `/etc/systemd/system/hermes.service`:
+
 ```ini
 [Unit]
 Description=Hermes Multi-Profile Gateway
@@ -281,6 +234,7 @@ WantedBy=multi-user.target
 ```
 
 Dienst aktivieren und starten:
+
 ```bash
 sudo systemctl daemon-reload
 sudo systemctl enable --now hermes
@@ -289,12 +243,13 @@ sudo systemctl status hermes
 
 ---
 
-## 9. Nützliche Troubleshooting-Befehle
+## 9. Nützliche Steuer- & Troubleshooting-Befehle
 
 | Zweck | Befehl |
 |---|---|
 | Gateway-Status prüfen | `hermes gateway status` |
+| Gateway nach Regeländerung neu starten | `hermes gateway restart` |
 | Live-Logs anzeigen | `journalctl -u hermes -f` |
-| Cronjobs anzeigen | `hermes cron list` |
-| Einzelnen Job manuell auslösen | `hermes cron run <JOB_NAME_ODER_ID>` |
-| Systemressourcen prüfen | `htop` bzw. `free -m` |
+| Aktive Cronjobs auflisten | `hermes cron list` |
+| Job manuell auslösen | `hermes cron run <JOB_NAME>` |
+| Systemressourcen & Speicher prüfen | `htop` bzw. `free -m` |
