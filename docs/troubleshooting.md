@@ -6,7 +6,7 @@
 
 ---
 
-## 1. Limitations of `bahn.expert` & Dual-Source Migration / Grenzen von `bahn.expert` & Umstellung
+## 1. Grenzen von `bahn.expert` & Umstellung / Limitations of `bahn.expert` & Dual-Source Migration
 
 | 🇩🇪 Deutsch | 🇬🇧 English |
 | :--- | :--- |
@@ -16,7 +16,7 @@
 
 ---
 
-## 2. Recommendation: The Open-Source Project `delay_bahn` / Empfehlung: Open-Source-Projekt `delay_bahn`
+## 2. Empfehlung: Open-Source-Projekt `delay_bahn` /Recommendation: The Open-Source Project `delay_bahn` 
 
 | 🇩🇪 Deutsch | 🇬🇧 English |
 | :--- | :--- |
@@ -49,11 +49,11 @@ cron:
 
 ---
 
-## 5. Timezone Offsets in Scheduler / Zeitzonen-Versatz bei Cronjobs
+## 5. Zeitzonen-Versatz bei Cronjobs / Timezone Offsets in Scheduler 
 
 | 🇩🇪 Deutsch | 🇬🇧 English |
 | :--- | :--- |
-| **UTC vs. Deutsche Lokalzeit**<br>Der Hermes-Scheduler operiert intern strikt in **UTC**. Werden Cronjobs in deutscher Lokalzeit (MEZ/MESZ) ohne Versatz notiert, starten die Jobs um 1 bis 2 Stunden versetzt.<br><br>**Lösungsmatrix:**<br>• Früh-Check (04:30 dt. Zeit): `30 2 * * *` (Sommerzeit UTC+2)<br>• Feierabend (15:00–17:30 dt. Zeit): `0,30 13,14,15 * * *`<br>• Baustellen-Scan (04:05 & 15:05 dt. Zeit): `5 2,13 * * *`<br>*(Hinweis: Bei Servern mit nativer Zeitzone `Europe/Berlin` greift die Lokalzeit direkt).* | **UTC vs. Local German Time**<br>The Hermes cron scheduler operates strictly in **UTC**. Registering schedules using local German time (CET/CEST) causes task execution to drift by 1 to 2 hours.<br><br>**Offset Matrix:**<br>• Morning check (04:30 local): `30 2 * * *` (CEST / UTC+2)<br>• Rush hour (15:00–17:30 local): `0,30 13,14,15 * * *`<br>• Construction scan (04:05 & 15:05 local): `5 2,13 * * *`<br>*(Note: If the VPS hardware clock is pinned to `Europe/Berlin`, local expressions execute as written).* |
+| **Zeitzonen-Prüfung: CEST-Lokalzeit vs. UTC-Scheduler**<br>Auf diesem VPS-Setup operiert Hermes bereits nativ in deutscher Lokalzeit (**CEST / `+02:00`**), wodurch Ausdrücke wie `30 4 * * *` (04:30 Uhr) oder `0,30 15,16,17 * * *` (15:00–17:30 Uhr) direkt zur gewünschten Ortszeit ausgeführt werden.<br><br>⚠️ **Wichtiger Prüfpunkt für andere Setups:**<br>Viele Standard-Linux-Server und Hermes-Instanzen operieren standardmäßig in **UTC (`+00:00`)**. Vor dem Einrichten von Cronjobs sollte mit `hermes cron list` immer der Zeitstempel unter `Next run` geprüft werden:<br>• Endet der Zeitstempel auf `+02:00` (Sommerzeit) bzw. `+01:00` (Winterzeit), greift die deutsche Lokalzeit direkt.<br>• Endet er auf `+00:00` (UTC), müssen die Cron-Stunden um den Versatz zurückgerechnet werden (z. B. 04:30 dt. Zeit = `30 2 * * *` UTC), da Aufträge sonst 1 bis 2 Stunden zu spät starten. | **Timezone Verification: CEST Local Time vs. UTC Scheduler**<br>On this VPS setup, Hermes runs natively in German local time (**CEST / `+02:00`**), allowing cron schedules such as `30 4 * * *` (04:30 AM) or `0,30 15,16,17 * * *` (15:00–17:30) to trigger directly at the intended local hour.<br><br>⚠️ **Crucial Check for Other Environments:**<br>Many standard Linux server deployments and default Hermes installations operate in **UTC (`+00:00`)**. Always verify the active timezone by checking the `Next run` timestamp in `hermes cron list` before defining tasks:<br>• If timestamps end with `+02:00` (CEST) or `+01:00` (CET), local German time expressions execute as written.<br>• If timestamps end with `+00:00` (UTC), the hour expressions must be offset accordingly (e.g., 04:30 local German time = `30 2 * * *` UTC); otherwise, commuter checks will trigger 1 to 2 hours late. |
 
 ---
 
